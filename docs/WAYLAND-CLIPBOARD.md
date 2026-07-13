@@ -84,7 +84,8 @@ after transient failures, but not after a missing-session error (exit status 2).
 - reacts to clipboard-change events via `wl-paste --watch` instead of polling;
 - mirrors only `image/png` and `text/uri-list` from Wayland to X11;
 - passes PNG data as raw bytes (no text conversion);
-- rejects payloads larger than 256 MiB before they can exhaust memory;
+- rejects image payloads larger than 256 MiB;
+- rejects URI lists larger than 8 MiB or 100,000 entries;
 - uses SHA-256 deduplication to prevent image feedback loops;
 - canonicalizes URI-list line endings to prevent a slow newline feedback loop;
 - does not change Wine, DXVK, VKD3D, or the Affinity prefix.
@@ -176,10 +177,11 @@ systemctl --user show-environment | grep -E '^(DISPLAY|WAYLAND_DISPLAY)='
 
 ### Payload is too large
 
-The default limit is 256 MiB. An oversized selection is rejected and logged as
-`too-large`. To choose a different bounded limit, add `--max-bytes BYTES` to the
-service's `ExecStart` line, run `systemctl --user daemon-reload`, and restart the
-service.
+The default image limit is 256 MiB. URI lists have a stricter fixed limit of
+8 MiB and 100,000 entries to prevent per-line memory amplification. An oversized
+selection is rejected and logged as `too-large` or `empty`. To choose a smaller
+bounded image limit, add `--max-bytes BYTES` to the service's `ExecStart` line,
+run `systemctl --user daemon-reload`, and restart the service.
 
 ### Text works but copied images do not
 

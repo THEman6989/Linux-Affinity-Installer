@@ -53,6 +53,10 @@ class ClipboardBridgeTests(unittest.TestCase):
             bridge.normalize_payload("text/uri-list", payload), expected
         )
 
+    def test_uri_list_rejects_excessive_line_count(self):
+        payload = b"file:///x\n" * (bridge.MAX_URI_LINES + 1)
+        self.assertIsNone(bridge.normalize_payload("text/uri-list", payload))
+
     def test_no_relevant_format_clears_cached_digest(self):
         with tempfile.TemporaryDirectory() as directory:
             digest_path = Path(directory) / "digest"
@@ -64,9 +68,30 @@ class ClipboardBridgeTests(unittest.TestCase):
             self.assertEqual(status, "no-relevant-format")
             self.assertFalse(digest_path.exists())
 
-    def test_xclip_failure_is_not_cached(self):
+    def test_digest_write_failure_prevents_xclip_change(self):
         with tempfile.TemporaryDirectory() as directory:
             digest_path = Path(directory) / "digest"
+            with (
+                mock.patch.object(bridge, "get_types", return_value={"image/png"}),
+                mock.patch.object(
+                    bridge, "read_bounded", return_value=(b"PNG\x00data", "ok")
+                ),
+                mock.patch.object(
+                    bridge, "write_cached_digest", side_effect=OSError("full")
+                ),
+                mock.patch.object(bridge, "set_x11_clipboard") as set_x11,
+            ):
+                status = bridge.process_current_selection(
+                    "wl-paste", "xclip", 1024, digest_path
+                )
+            self.assertEqual(status, "digest-write-failed")
+            set_x11.assert_not_called()
+
+    def test_xclip_failure_restores_previous_digest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            digest_path = Path(directory) / "digest"
+            previous = b"\x11" * 32
+            bridge.write_cached_digest(digest_path, previous)
             with (
                 mock.patch.object(bridge, "get_types", return_value={"image/png"}),
                 mock.patch.object(
@@ -78,7 +103,7 @@ class ClipboardBridgeTests(unittest.TestCase):
                     "wl-paste", "xclip", 1024, digest_path
                 )
             self.assertEqual(status, "xclip-failed")
-            self.assertFalse(digest_path.exists())
+            self.assertEqual(bridge.read_cached_digest(digest_path), previous)
 
     def test_event_helper_keeps_standard_input_descriptor_open(self):
         with tempfile.TemporaryDirectory() as directory:

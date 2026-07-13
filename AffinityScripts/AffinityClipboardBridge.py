@@ -21,6 +21,8 @@ import time
 from typing import Optional
 
 DEFAULT_MAX_BYTES = 256 * 1024 * 1024
+MAX_URI_BYTES = 8 * 1024 * 1024
+MAX_URI_LINES = 100_000
 MAX_TYPES_BYTES = 64 * 1024
 READ_TIMEOUT_SECONDS = 5.0
 PRIORITY = ("text/uri-list", "image/png")
@@ -111,17 +113,37 @@ def normalize_payload(mime: str, payload: bytes) -> Optional[bytes]:
     if mime != "text/uri-list":
         return payload or None
 
-    # Xwayland/Klipper may append another newline whenever a selection crosses
-    # the Wayland/X11 boundary. Canonical CRLF keeps the digest stable.
-    normalized = payload.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
-    lines = [
-        line.strip()
-        for line in normalized.split(b"\n")
-        if line.strip() and not line.lstrip().startswith(b"#")
-    ]
-    if not lines:
+    # Process one line at a time. split()/splitlines() would allocate one bytes
+    # object per line and can amplify a small URI list into hundreds of MiB.
+    output = bytearray()
+    line_count = 0
+    start = 0
+    view = memoryview(payload)
+
+    def append_line(end: int) -> bool:
+        nonlocal line_count
+        line = bytes(view[start:end]).strip()
+        if not line or line.startswith(b"#"):
+            return True
+        line_count += 1
+        if line_count > MAX_URI_LINES:
+            return False
+        if len(output) + len(line) + 2 > MAX_URI_BYTES:
+            return False
+        output.extend(line)
+        output.extend(b"\r\n")
+        return True
+
+    for index, value in enumerate(payload):
+        if value not in (10, 13):
+            continue
+        if not append_line(index):
+            return None
+        start = index + 1
+
+    if start < len(payload) and not append_line(len(payload)):
         return None
-    return b"\r\n".join(lines) + b"\r\n"
+    return bytes(output) if output else None
 
 
 def set_x11_clipboard(xclip: str, mime: str, payload: bytes) -> bool:
@@ -157,6 +179,13 @@ def clear_cached_digest(path: Path) -> None:
         pass
 
 
+def restore_cached_digest(path: Path, digest: Optional[bytes]) -> None:
+    if digest is None:
+        clear_cached_digest(path)
+    else:
+        write_cached_digest(path, digest)
+
+
 def process_current_selection(
     wl_paste: str,
     xclip: str,
@@ -169,7 +198,14 @@ def process_current_selection(
         clear_cached_digest(digest_path)
         return "no-relevant-format"
 
-    payload, status = read_bounded([wl_paste, "--type", mime], max_bytes)
+    payload_limit = (
+        min(max_bytes, MAX_URI_BYTES)
+        if mime == "text/uri-list"
+        else max_bytes
+    )
+    payload, status = read_bounded(
+        [wl_paste, "--type", mime], payload_limit
+    )
     if status != "ok" or payload is None:
         return status
 
@@ -178,13 +214,21 @@ def process_current_selection(
         return "empty"
 
     digest = hashlib.sha256(mime.encode() + b"\0" + payload).digest()
-    if digest == read_cached_digest(digest_path):
+    previous_digest = read_cached_digest(digest_path)
+    if digest == previous_digest:
         return "unchanged"
 
+    # Persist the feedback-loop guard before changing the X11 selection. If
+    # runtime storage is unavailable, xclip is never invoked.
+    try:
+        write_cached_digest(digest_path, digest)
+    except OSError:
+        return "digest-write-failed"
+
     if not set_x11_clipboard(xclip, mime, payload):
+        restore_cached_digest(digest_path, previous_digest)
         return "xclip-failed"
 
-    write_cached_digest(digest_path, digest)
     print(f"mirrored {mime}: {len(payload)} bytes", flush=True)
     return "mirrored"
 
