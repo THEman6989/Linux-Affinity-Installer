@@ -1,0 +1,13 @@
+[Unit]
+Description=Affinity PNG file clipboard owner (Wayland to X11)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.local/bin/affinity-png-file-clipboard.py
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
