@@ -10,6 +10,7 @@ Environment=PYTHONUNBUFFERED=1
 PassEnvironment=DISPLAY WAYLAND_DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS
 ExecStart=/usr/bin/python3 %h/.local/bin/affinity-clipboard-v2.py --owner %h/.local/bin/affinity-clipboard-owner
 Restart=on-failure
+RestartPreventExitStatus=2
 RestartSec=2
 KillMode=control-group
 

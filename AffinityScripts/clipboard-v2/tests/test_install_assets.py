@@ -14,6 +14,7 @@ class InstallAssetTests(unittest.TestCase):
         self.assertIn("--owner %h/.local/bin/affinity-clipboard-owner", text)
         self.assertIn("Conflicts=affinity-png-file-clipboard.service", text)
         self.assertIn("KillMode=control-group", text)
+        self.assertIn("RestartPreventExitStatus=2", text)
 
     def test_tray_autostart_is_visible_to_plasma_settings(self):
         text = (PACKAGING / "affinity-clipboard-tray.desktop").read_text()

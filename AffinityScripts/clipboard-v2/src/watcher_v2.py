@@ -102,10 +102,10 @@ def read_bounded(args: list[str], max_bytes: int) -> tuple[Optional[bytes], str]
             process.wait()
 
 
-def get_types(wl_paste: str) -> set[str]:
+def get_types(wl_paste: str) -> Optional[set[str]]:
     payload, status = read_bounded([wl_paste, "--list-types"], MAX_TYPES_BYTES)
     if status != "ok" or payload is None:
-        return set()
+        return None
     return {
         line.decode("utf-8", "replace").strip()
         for line in payload.splitlines()
@@ -279,6 +279,12 @@ def event_main(owner_binary: Path) -> int:
     with lock_path.open("a+b") as lock_file:
         fcntl.flock(lock_file, fcntl.LOCK_EX)
         types = get_types(wl_paste)
+        if types is None:
+            print(
+                "Affinity clipboard V2 warning: MIME types unavailable",
+                file=sys.stderr,
+            )
+            return 0
         action = selection_action(types)
         if action == "self-feedback":
             return 0
@@ -291,6 +297,7 @@ def event_main(owner_binary: Path) -> int:
         )
         if status != "ok" or payload is None:
             print(f"Affinity clipboard V2 warning: {status}", file=sys.stderr)
+            stop_owner(pid_path, owner_binary)
             return 0
         png_path = parse_single_png(payload)
         if png_path is None:

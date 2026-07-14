@@ -19,6 +19,53 @@ spec.loader.exec_module(watcher)
 
 
 class WatcherV2Tests(unittest.TestCase):
+    def test_event_types_failure_preserves_existing_owner(self):
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            pid_path = directory / "owner.pid"
+            lock_path = directory / "watcher.lock"
+            owner = directory / "owner"
+            owner.write_bytes(b"")
+
+            with (
+                mock.patch.object(watcher, "detach_watch_stdin"),
+                mock.patch.object(watcher, "command_path", return_value="wl-paste"),
+                mock.patch.object(
+                    watcher, "runtime_paths", return_value=(pid_path, lock_path)
+                ),
+                mock.patch.object(watcher, "get_types", return_value=None),
+                mock.patch.object(watcher, "stop_owner") as stop_owner,
+            ):
+                self.assertEqual(watcher.event_main(owner), 0)
+
+            stop_owner.assert_not_called()
+
+    def test_event_uri_read_failure_releases_existing_owner(self):
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            pid_path = directory / "owner.pid"
+            lock_path = directory / "watcher.lock"
+            owner = directory / "owner"
+            owner.write_bytes(b"")
+
+            with (
+                mock.patch.object(watcher, "detach_watch_stdin"),
+                mock.patch.object(watcher, "command_path", return_value="wl-paste"),
+                mock.patch.object(
+                    watcher, "runtime_paths", return_value=(pid_path, lock_path)
+                ),
+                mock.patch.object(
+                    watcher, "get_types", return_value={"text/uri-list"}
+                ),
+                mock.patch.object(
+                    watcher, "read_bounded", return_value=(None, "timeout")
+                ),
+                mock.patch.object(watcher, "stop_owner") as stop_owner,
+            ):
+                self.assertEqual(watcher.event_main(owner), 0)
+
+            stop_owner.assert_called_once_with(pid_path, owner)
+
     def test_stop_owner_fails_closed_without_pidfd(self):
         with tempfile.TemporaryDirectory() as directory_name:
             directory = Path(directory_name)
