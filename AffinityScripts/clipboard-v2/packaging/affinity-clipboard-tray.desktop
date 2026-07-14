@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Affinity PNG-Clipboard
+Comment=Affinity PNG-Clipboard zur Laufzeit ein- oder ausschalten
+Exec=affinity-clipboard-tray
+TryExec=affinity-clipboard-tray
+Icon=edit-paste
+Terminal=false
+OnlyShowIn=KDE;
+X-KDE-autostart-phase=2
+X-GNOME-Autostart-enabled=true

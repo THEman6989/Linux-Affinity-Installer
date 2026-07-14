@@ -1,0 +1,17 @@
+[Unit]
+Description=Affinity PNG multi-format clipboard bridge (Wayland to X11)
+After=graphical-session.target
+PartOf=graphical-session.target
+Conflicts=affinity-png-file-clipboard.service affinity-clipboard-bridge.service
+
+[Service]
+Type=simple
+Environment=PYTHONUNBUFFERED=1
+PassEnvironment=DISPLAY WAYLAND_DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS
+ExecStart=/usr/bin/python3 %h/.local/bin/affinity-clipboard-v2.py --owner %h/.local/bin/affinity-clipboard-owner
+Restart=on-failure
+RestartSec=2
+KillMode=control-group
+
+[Install]
+WantedBy=default.target
