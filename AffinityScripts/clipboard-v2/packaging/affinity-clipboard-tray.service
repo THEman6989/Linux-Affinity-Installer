@@ -1,0 +1,13 @@
+[Unit]
+Description=Affinity PNG clipboard system tray switch
+After=graphical-session.target plasma-workspace.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/affinity-clipboard-tray
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
